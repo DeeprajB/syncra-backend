@@ -1,7 +1,8 @@
 from datetime import datetime, timezone
-from typing import Any, Dict, Optional
+from typing import Any, Dict, List, Optional
 
 from app.core.database import database
+from app.core.mongo import parse_object_id
 from app.models.auth.user import User
 
 def serialize_user(document: Dict[str, Any]) -> User:
@@ -47,3 +48,25 @@ async def find_by_sub(sub: str) -> Optional[User]:
     if document is None:
         return None
     return serialize_user(document)
+
+
+async def find_by_id(user_id: str) -> Optional[User]:
+    object_id = parse_object_id(user_id)
+    if object_id is None:
+        return None
+    document = await database.users.find_one({"_id": object_id})
+    if document is None:
+        return None
+    return serialize_user(document)
+
+
+async def find_by_ids(user_ids: List[str]) -> List[User]:
+    object_ids = []
+    for user_id in user_ids:
+        object_id = parse_object_id(user_id)
+        if object_id is not None:
+            object_ids.append(object_id)
+    if not object_ids:
+        return []
+    documents = await database.users.find({"_id": {"$in": object_ids}}).to_list()
+    return [serialize_user(document) for document in documents]

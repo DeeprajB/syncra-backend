@@ -1,3 +1,4 @@
+from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -6,6 +7,8 @@ class Settings(BaseSettings):
     mongodb_database: str = "syncra-db"
     auth0_domain: str
     auth0_audience: str
+    app_base_url: str = "https://syncra-frontend.deeprajb012.workers.dev"
+    invitation_ttl_days: int = Field(default=7, ge=1)
 
     model_config = SettingsConfigDict(
         env_file=".env",

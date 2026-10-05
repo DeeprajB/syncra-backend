@@ -3,13 +3,19 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.api.routes import auth
+from app.api.routes import auth, invitations, workspaces
 from app.core.database import check_database_connection
-from app.repositories.users import ensure_indexes
+from app.repositories.invitations import ensure_indexes as ensure_invitation_indexes
+from app.repositories.users import ensure_indexes as ensure_user_indexes
+from app.repositories.workspace_members import ensure_indexes as ensure_member_indexes
+from app.repositories.workspaces import ensure_indexes as ensure_workspace_indexes
 
 @asynccontextmanager
 async def lifespan(_app: FastAPI):
-    await ensure_indexes()
+    await ensure_user_indexes()
+    await ensure_workspace_indexes()
+    await ensure_member_indexes()
+    await ensure_invitation_indexes()
     yield
 
 app = FastAPI(
@@ -40,3 +46,5 @@ async def db_health():
     }
 
 app.include_router(auth.router)
+app.include_router(workspaces.router)
+app.include_router(invitations.router)
