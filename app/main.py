@@ -3,9 +3,10 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.api.routes import auth, invitations, workspaces
+from app.api.routes import auth, invitations, projects, workspaces
 from app.core.database import check_database_connection
 from app.repositories.invitations import ensure_indexes as ensure_invitation_indexes
+from app.repositories.projects import ensure_indexes as ensure_project_indexes
 from app.repositories.users import ensure_indexes as ensure_user_indexes
 from app.repositories.workspace_members import ensure_indexes as ensure_member_indexes
 from app.repositories.workspaces import ensure_indexes as ensure_workspace_indexes
@@ -16,11 +17,12 @@ async def lifespan(_app: FastAPI):
     await ensure_workspace_indexes()
     await ensure_member_indexes()
     await ensure_invitation_indexes()
+    await ensure_project_indexes()
     yield
 
 app = FastAPI(
     title="Syncra Backend",
-    version="0.0.3",
+    version="0.0.4",
     description="FastAPI backend for Syncra, providing REST APIs, WebSockets, authentication, and MongoDB data management for real-time project collaboration.",
     lifespan=lifespan,
 )
@@ -48,3 +50,4 @@ async def db_health():
 app.include_router(auth.router)
 app.include_router(workspaces.router)
 app.include_router(invitations.router)
+app.include_router(projects.router)
