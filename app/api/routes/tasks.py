@@ -4,6 +4,7 @@ from fastapi import APIRouter, Depends, Query, status
 
 from app.models.auth.user import User
 from app.models.task import TaskPriority, TaskStatus
+from app.schemas.activity import ActivityListResponse
 from app.schemas.task import (
     TaskCreate,
     TaskListResponse,
@@ -83,6 +84,19 @@ async def reorder_tasks(
     current_user: User = Depends(sync_current_user),
 ) -> TaskReorderResponse:
     return await task_service.reorder_tasks(project_id, current_user, payload)
+
+
+@router.get(
+    "/api/v1/tasks/{task_id}/activity",
+    response_model=ActivityListResponse,
+    summary="List task activity",
+    description="Returns the newest activity for one task. Any workspace member can read it.",
+)
+async def list_task_activity(
+    task_id: str,
+    current_user: User = Depends(sync_current_user),
+) -> ActivityListResponse:
+    return await task_service.list_task_activity(task_id, current_user)
 
 
 @router.get("/api/v1/tasks/{task_id}", response_model=TaskResponse)

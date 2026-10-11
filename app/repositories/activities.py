@@ -1,4 +1,4 @@
-from typing import Any, Dict
+from typing import Any, Dict, List
 
 from app.core.database import database
 from app.models.activity import Activity
@@ -26,6 +26,16 @@ async def ensure_indexes() -> None:
         [("project_id", 1), ("created_at", -1)],
         name="project_activity",
     )
+
+
+async def list_for_task(task_id: str, limit: int = 50) -> List[Activity]:
+    cursor = (
+        database.activities.find({"task_id": task_id})
+        .sort("created_at", -1)
+        .limit(limit)
+    )
+    documents = await cursor.to_list()
+    return [serialize_activity(document) for document in documents]
 
 
 async def insert(document: Dict[str, Any], session: Any = None) -> Activity:

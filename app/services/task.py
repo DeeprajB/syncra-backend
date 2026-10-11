@@ -16,6 +16,7 @@ from app.repositories import activities as activities_repository
 from app.repositories import projects as projects_repository
 from app.repositories import tasks as tasks_repository
 from app.repositories import workspace_members as members_repository
+from app.schemas.activity import ActivityListResponse, activity_item
 from app.schemas.task import (
     TaskCreate,
     TaskListResponse,
@@ -354,6 +355,12 @@ async def list_tasks(
         items=[task_response(task) for task in page],
         next_cursor=next_cursor,
     )
+
+
+async def list_task_activity(task_id: str, current_user: User) -> ActivityListResponse:
+    task, _project, _access = await _access_for_task(task_id, current_user)
+    items = await activities_repository.list_for_task(task.id)
+    return ActivityListResponse(items=[activity_item(item) for item in items])
 
 
 async def get_task(task_id: str, current_user: User) -> TaskResponse:
