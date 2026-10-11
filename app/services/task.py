@@ -29,6 +29,7 @@ from app.schemas.task import (
     plain_value,
     task_response,
 )
+from app.services import notification as notification_service
 from app.services.workspace_access import WorkspaceAccess, require_workspace_member
 
 _STALE_TASK = "Task has been modified. Refresh and try again."
@@ -329,6 +330,15 @@ async def create_task(
             session=session,
         )
     _publish(event)
+    await notification_service.notify_task_assigned(
+        workspace_id=project.workspace_id,
+        project_id=project.id,
+        task_id=task.id,
+        task_title=task.title,
+        actor=current_user,
+        recipient_id=task.assignee_id,
+        version=task.version,
+    )
     return task_response(task)
 
 
@@ -416,6 +426,7 @@ async def update_task(
             expected_version,
         )
         _publish(event)
+        await _notify_reassignment(task, updated, project.workspace_id, project.id, current_user)
         return task_response(updated)
 
     action = ActivityAction.UPDATED.value
@@ -444,7 +455,22 @@ async def update_task(
             session=session,
         )
     _publish(event)
+    await _notify_reassignment(task, updated, project.workspace_id, project.id, current_user)
     return task_response(updated)
+
+
+async def _notify_reassignment(previous, updated, workspace_id, project_id, actor: User) -> None:
+    if updated.assignee_id == previous.assignee_id:
+        return
+    await notification_service.notify_task_assigned(
+        workspace_id=workspace_id,
+        project_id=project_id,
+        task_id=updated.id,
+        task_title=updated.title,
+        actor=actor,
+        recipient_id=updated.assignee_id,
+        version=updated.version,
+    )
 
 
 async def _change_status(

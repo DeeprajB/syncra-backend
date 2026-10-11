@@ -152,7 +152,12 @@ class ConnectionManager:
             workspace_id = event.get("workspace_id")
             if not workspace_id:
                 return
-            dropped = await self._deliver(workspace_id, event, exclude_connection_id)
+            dropped = await self._deliver(
+                workspace_id,
+                event,
+                exclude_connection_id,
+                only_user_id=event.get("recipient_id"),
+            )
             await self._announce(dropped)
         except Exception:
             logger.exception("Realtime broadcast failed")
@@ -202,11 +207,14 @@ class ConnectionManager:
         workspace_id: str,
         payload: Dict[str, Any],
         exclude_connection_id: Optional[str] = None,
+        only_user_id: Optional[str] = None,
     ) -> List[DisconnectResult]:
         room = self._rooms.get(workspace_id, {})
         dropped = []
         for connection in list(room.values()):
             if connection.connection_id == exclude_connection_id:
+                continue
+            if only_user_id and connection.user_id != only_user_id:
                 continue
             try:
                 await connection.socket.send_json(payload)

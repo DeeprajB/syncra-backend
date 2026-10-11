@@ -3,13 +3,24 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.api.routes import activity, auth, comments, invitations, projects, realtime, tasks, workspaces
+from app.api.routes import (
+    activity,
+    auth,
+    comments,
+    invitations,
+    notifications,
+    projects,
+    realtime,
+    tasks,
+    workspaces,
+)
 from app.core import events
 from app.core.database import check_database_connection
 from app.realtime.manager import manager
 from app.repositories.activities import ensure_indexes as ensure_activity_indexes
 from app.repositories.comments import ensure_indexes as ensure_comment_indexes
 from app.repositories.invitations import ensure_indexes as ensure_invitation_indexes
+from app.repositories.notifications import ensure_indexes as ensure_notification_indexes
 from app.repositories.projects import ensure_indexes as ensure_project_indexes
 from app.repositories.tasks import ensure_indexes as ensure_task_indexes
 from app.repositories.users import ensure_indexes as ensure_user_indexes
@@ -28,6 +39,7 @@ async def lifespan(_app: FastAPI):
         await ensure_task_indexes()
         await ensure_activity_indexes()
         await ensure_comment_indexes()
+        await ensure_notification_indexes()
         yield
     finally:
         events.unsubscribe(manager.publish)
@@ -35,7 +47,7 @@ async def lifespan(_app: FastAPI):
 
 app = FastAPI(
     title="Syncra Backend",
-    version="0.0.6",
+    version="0.0.7",
     description="FastAPI backend for Syncra, providing REST APIs, WebSockets, authentication, and MongoDB data management for real-time project collaboration.",
     lifespan=lifespan,
 )
@@ -66,5 +78,6 @@ app.include_router(invitations.router)
 app.include_router(projects.router)
 app.include_router(tasks.router)
 app.include_router(comments.router)
+app.include_router(notifications.router)
 app.include_router(activity.router)
 app.include_router(realtime.router)

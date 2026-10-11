@@ -88,6 +88,7 @@ class _Database:
     def __init__(self):
         self.tasks = _Collection()
         self.activities = _Collection()
+        self.notifications = _Collection()
 
 
 @asynccontextmanager
@@ -123,6 +124,7 @@ class TaskApiTests(unittest.TestCase):
         self.patches = [
             patch("app.repositories.tasks.database", self.db),
             patch("app.repositories.activities.database", self.db),
+            patch("app.repositories.notifications.database", self.db),
             patch("app.repositories.workspaces.find_active_by_id", new=find_workspace),
             patch("app.repositories.workspace_members.find_by_workspace_and_user", new=find_member),
             patch("app.repositories.projects.find_active_by_id", new=find_project),

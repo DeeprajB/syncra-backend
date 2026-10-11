@@ -95,6 +95,7 @@ class _Database:
     def __init__(self):
         self.comments = _Collection()
         self.activities = _Collection()
+        self.notifications = _Collection()
 
 
 class FakeSocket:
@@ -168,6 +169,7 @@ class RealtimeApiTests(unittest.TestCase):
         self.patches = [
             patch("app.repositories.comments.database", self.db),
             patch("app.repositories.activities.database", self.db),
+            patch("app.repositories.notifications.database", self.db),
             patch("app.repositories.workspaces.find_active_by_id", new=find_workspace),
             patch("app.repositories.workspaces.find_by_id", new=find_workspace),
             patch("app.repositories.workspace_members.find_by_workspace_and_user", new=find_member),

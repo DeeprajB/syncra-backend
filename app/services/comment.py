@@ -19,6 +19,7 @@ from app.repositories import tasks as tasks_repository
 from app.repositories import users as users_repository
 from app.schemas.comment import CommentBody, CommentListResponse, CommentResponse
 from app.schemas.workspace_member import public_profile
+from app.services import notification as notification_service
 from app.services.activity import record_activity
 from app.services.workspace_access import WorkspaceAccess, require_workspace_member
 
@@ -139,6 +140,16 @@ async def create_comment(task_id: str, current_user: User, payload: CommentBody)
         )
     event["data"] = _event_data(comment, response)
     _publish(event)
+    await notification_service.notify_comment_created(
+        workspace_id=project.workspace_id,
+        project_id=project.id,
+        task_id=task.id,
+        task_title=task.title,
+        assignee_id=task.assignee_id,
+        comment_id=comment.id,
+        content=comment.content,
+        actor=current_user,
+    )
     return response
 
 
