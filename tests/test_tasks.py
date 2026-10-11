@@ -497,7 +497,7 @@ class TaskApiTests(unittest.TestCase):
             ["project_status_position", "project_updated", "assignee_status_due", "parent_task"],
         )
         activity_names = [kwargs.get("name") for _keys, kwargs in self.db.activities.indexes]
-        self.assertEqual(activity_names, ["task_activity", "project_activity"])
+        self.assertEqual(activity_names, ["task_activity", "project_activity", "workspace_activity"])
 
         from app.main import app
 

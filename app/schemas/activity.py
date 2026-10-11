@@ -19,6 +19,17 @@ class ActivityListResponse(BaseModel):
     items: List[ActivityItem]
 
 
+class WorkspaceActivityItem(ActivityItem):
+    project_id: Optional[str] = None
+    actor_name: str = "Unknown"
+    avatar_url: str = ""
+
+
+class WorkspaceActivityListResponse(BaseModel):
+    items: List[WorkspaceActivityItem]
+    next_cursor: Optional[str] = None
+
+
 def activity_item(activity: Activity) -> ActivityItem:
     return ActivityItem(
         id=activity.id,

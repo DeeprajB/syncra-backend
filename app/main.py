@@ -3,9 +3,12 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.api.routes import auth, invitations, projects, tasks, workspaces
+from app.api.routes import activity, auth, comments, invitations, projects, realtime, tasks, workspaces
+from app.core import events
 from app.core.database import check_database_connection
+from app.realtime.manager import manager
 from app.repositories.activities import ensure_indexes as ensure_activity_indexes
+from app.repositories.comments import ensure_indexes as ensure_comment_indexes
 from app.repositories.invitations import ensure_indexes as ensure_invitation_indexes
 from app.repositories.projects import ensure_indexes as ensure_project_indexes
 from app.repositories.tasks import ensure_indexes as ensure_task_indexes
@@ -15,18 +18,24 @@ from app.repositories.workspaces import ensure_indexes as ensure_workspace_index
 
 @asynccontextmanager
 async def lifespan(_app: FastAPI):
-    await ensure_user_indexes()
-    await ensure_workspace_indexes()
-    await ensure_member_indexes()
-    await ensure_invitation_indexes()
-    await ensure_project_indexes()
-    await ensure_task_indexes()
-    await ensure_activity_indexes()
-    yield
+    events.subscribe(manager.publish)
+    try:
+        await ensure_user_indexes()
+        await ensure_workspace_indexes()
+        await ensure_member_indexes()
+        await ensure_invitation_indexes()
+        await ensure_project_indexes()
+        await ensure_task_indexes()
+        await ensure_activity_indexes()
+        await ensure_comment_indexes()
+        yield
+    finally:
+        events.unsubscribe(manager.publish)
+        await manager.close_all()
 
 app = FastAPI(
     title="Syncra Backend",
-    version="0.0.5",
+    version="0.0.6",
     description="FastAPI backend for Syncra, providing REST APIs, WebSockets, authentication, and MongoDB data management for real-time project collaboration.",
     lifespan=lifespan,
 )
@@ -56,3 +65,6 @@ app.include_router(workspaces.router)
 app.include_router(invitations.router)
 app.include_router(projects.router)
 app.include_router(tasks.router)
+app.include_router(comments.router)
+app.include_router(activity.router)
+app.include_router(realtime.router)

@@ -9,7 +9,7 @@ class Activity(BaseModel):
 
     id: str = Field(alias="_id")
     workspace_id: str
-    project_id: str
+    project_id: Optional[str] = None
     task_id: Optional[str] = None
     actor_id: str
     action: str

@@ -1,7 +1,9 @@
+import logging
 from typing import Dict, List
 
 from fastapi import HTTPException, status
 
+from app.core import events
 from app.core.database import transaction
 from app.core.time import utc_now
 from app.models.auth.user import User
@@ -20,12 +22,15 @@ from app.schemas.workspace_member import (
     WorkspaceMemberUpdate,
     workspace_member_response,
 )
+from app.services.activity import record_member_event
 from app.services.workspace_access import (
     require_user_id,
     require_workspace_admin,
     require_workspace_member,
     require_workspace_owner,
 )
+
+logger = logging.getLogger(__name__)
 
 _ROLE_ORDER = {
     MemberRole.OWNER: 0,
@@ -165,6 +170,7 @@ async def remove_member(workspace_id: str, member_id: str, current_user: User) -
     deleted = await members_repository.delete(access.workspace.id, member.id)
     if not deleted:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Member not found")
+    await _member_departed(access.workspace.id, member.user_id)
 
 
 async def leave_workspace(workspace_id: str, current_user: User) -> None:
@@ -177,6 +183,7 @@ async def leave_workspace(workspace_id: str, current_user: User) -> None:
     deleted = await members_repository.delete(access.workspace.id, access.membership.id)
     if not deleted:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Member not found")
+    await _member_departed(access.workspace.id, access.membership.user_id)
 
 
 def _assert_can_remove(actor: WorkspaceMember, target: WorkspaceMember) -> None:
@@ -208,6 +215,20 @@ def _assert_can_remove(actor: WorkspaceMember, target: WorkspaceMember) -> None:
         status_code=status.HTTP_403_FORBIDDEN,
         detail="You do not have permission to remove this member",
     )
+
+
+async def _member_departed(workspace_id: str, user_id: str) -> None:
+    try:
+        event = await record_member_event(workspace_id, user_id, "member.left")
+        events.publish(event)
+    except Exception:
+        logger.exception("Failed to record member.left")
+    try:
+        from app.realtime.manager import manager
+
+        await manager.disconnect_user(workspace_id, user_id)
+    except Exception:
+        logger.exception("Failed to disconnect removed member")
 
 
 async def _member_response(member: WorkspaceMember) -> WorkspaceMemberResponse:

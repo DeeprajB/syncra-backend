@@ -7,6 +7,7 @@ from pymongo.errors import DuplicateKeyError
 
 from app.core.config import settings
 from app.core.database import transaction
+from app.core import events
 from app.core.time import as_utc, utc_now
 from app.models.auth.user import User
 from app.models.workspace_member import MemberRole
@@ -15,6 +16,7 @@ from app.repositories import workspace_members as members_repository
 from app.repositories import workspaces as workspaces_repository
 from app.schemas.invitation import InvitationCreated
 from app.schemas.workspace import WorkspaceResponse, workspace_response
+from app.services.activity import record_member_event
 from app.services.workspace_access import require_user_id, require_workspace_admin
 
 _MAX_TOKEN_LENGTH = 512
@@ -96,10 +98,17 @@ async def join_invitation(invite_token: str, current_user: User) -> WorkspaceRes
                 session=session,
             )
             await invitations_repository.mark_used(invitation.id, now, session=session)
+            event = await record_member_event(
+                workspace.id,
+                user_id,
+                "member.joined",
+                session=session,
+            )
     except DuplicateKeyError:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
             detail="You are already a member of this workspace",
         ) from None
 
+    events.publish(event)
     return workspace_response(workspace)

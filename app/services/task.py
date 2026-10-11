@@ -8,6 +8,7 @@ from fastapi import HTTPException, status
 from app.core import events
 from app.core.database import transaction
 from app.core.time import as_utc, utc_now
+from app.realtime.protocol import build_envelope
 from app.models.auth.user import User
 from app.models.project import Project
 from app.models.task import STATUS_RANK, ActivityAction, Task, TaskStatus
@@ -192,6 +193,7 @@ async def _record(
     session: Any,
 ) -> Dict[str, Any]:
     stored = {key: plain_value(value) for key, value in metadata.items()}
+    occurred = utc_now()
     await activities_repository.insert(
         {
             "workspace_id": workspace_id,
@@ -200,18 +202,19 @@ async def _record(
             "actor_id": actor_id,
             "action": action,
             "metadata": stored,
-            "created_at": utc_now(),
+            "created_at": occurred,
         },
         session=session,
     )
-    return {
-        "type": action,
-        "workspace_id": workspace_id,
-        "project_id": project_id,
-        "task_id": task_id,
-        "actor_id": actor_id,
-        "data": stored,
-    }
+    return build_envelope(
+        type=action,
+        workspace_id=workspace_id,
+        project_id=project_id,
+        task_id=task_id,
+        actor_id=actor_id,
+        data=stored,
+        occurred_at=occurred,
+    )
 
 
 def _publish(event: Optional[Dict[str, Any]]) -> None:

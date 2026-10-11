@@ -1,5 +1,5 @@
 from datetime import datetime
-from typing import Literal, Optional
+from typing import Dict, Literal, Optional
 
 from pydantic import BaseModel, ConfigDict
 
@@ -21,6 +21,16 @@ class WorkspaceMemberResponse(BaseModel):
     avatar_url: str
     role: MemberRole
     joined_at: datetime
+
+
+def public_profile(user: Optional[User], user_id: str) -> Dict[str, str]:
+    if user is None:
+        return {"user_id": user_id, "name": "Unknown", "avatar_url": ""}
+    return {
+        "user_id": user_id,
+        "name": display_name(user),
+        "avatar_url": user.picture or "",
+    }
 
 
 def display_name(user: User) -> str:
