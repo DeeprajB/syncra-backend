@@ -20,6 +20,9 @@ class Connection:
     avatar_url: str
     project_id: Optional[str] = None
     task_id: Optional[str] = None
+    cursor_project_id: Optional[str] = None
+    cursor_task_id: Optional[str] = None
+    cursor_column: Optional[str] = None
 
 
 @dataclass
@@ -122,18 +125,37 @@ class ConnectionManager:
             return None
         return connection, previous_task, previous_project
 
+    def set_cursor(
+        self,
+        workspace_id: str,
+        connection_id: str,
+        project_id: Optional[str],
+        task_id: Optional[str],
+        column: Optional[str],
+    ) -> bool:
+        connection = self._connection(workspace_id, connection_id)
+        if connection is None:
+            return False
+        connection.cursor_project_id = project_id
+        connection.cursor_task_id = task_id
+        connection.cursor_column = column
+        return True
+
     def snapshot(self, workspace_id: str) -> List[Dict[str, Any]]:
         by_user: Dict[str, Dict[str, Any]] = {}
         for connection in self._rooms.get(workspace_id, {}).values():
             current = by_user.get(connection.user_id)
-            if current is None or (connection.task_id and not current.get("task_id")):
-                by_user[connection.user_id] = {
-                    "user_id": connection.user_id,
-                    "name": connection.name,
-                    "avatar_url": connection.avatar_url,
-                    "task_id": connection.task_id,
-                    "project_id": connection.project_id,
-                }
+            row = _member_row(connection)
+            if current is None:
+                by_user[connection.user_id] = row
+                continue
+            if connection.task_id and not current.get("task_id"):
+                current["task_id"] = connection.task_id
+                current["project_id"] = connection.project_id
+            if _has_cursor(connection) and not _row_has_cursor(current):
+                current["cursor_project_id"] = connection.cursor_project_id
+                current["cursor_task_id"] = connection.cursor_task_id
+                current["cursor_column"] = connection.cursor_column
         return list(by_user.values())
 
     def publish(self, event: Dict[str, Any]) -> None:
@@ -246,6 +268,23 @@ class ConnectionManager:
                         },
                     ),
                 )
+            if _has_cursor(connection):
+                remaining = self._remaining_cursor(connection.workspace_id, connection.user_id)
+                if remaining is None:
+                    await self._deliver(
+                        connection.workspace_id,
+                        _cursor_event(connection, None, None, None),
+                    )
+                else:
+                    await self._deliver(
+                        connection.workspace_id,
+                        _cursor_event(
+                            remaining,
+                            remaining.cursor_project_id,
+                            remaining.cursor_task_id,
+                            remaining.cursor_column,
+                        ),
+                    )
             if result.last_for_user:
                 await self._deliver(
                     connection.workspace_id,
@@ -260,6 +299,56 @@ class ConnectionManager:
                         },
                     ),
                 )
+
+    def _remaining_cursor(self, workspace_id: str, user_id: str) -> Optional[Connection]:
+        for connection in self._rooms.get(workspace_id, {}).values():
+            if connection.user_id == user_id and _has_cursor(connection):
+                return connection
+        return None
+
+
+def _has_cursor(connection: Connection) -> bool:
+    return bool(connection.cursor_task_id or connection.cursor_column)
+
+
+def _row_has_cursor(row: Dict[str, Any]) -> bool:
+    return bool(row.get("cursor_task_id") or row.get("cursor_column"))
+
+
+def _member_row(connection: Connection) -> Dict[str, Any]:
+    return {
+        "user_id": connection.user_id,
+        "name": connection.name,
+        "avatar_url": connection.avatar_url,
+        "task_id": connection.task_id,
+        "project_id": connection.project_id,
+        "cursor_project_id": connection.cursor_project_id,
+        "cursor_task_id": connection.cursor_task_id,
+        "cursor_column": connection.cursor_column,
+    }
+
+
+def _cursor_event(
+    connection: Connection,
+    project_id: Optional[str],
+    task_id: Optional[str],
+    column: Optional[str],
+) -> Dict[str, Any]:
+    return build_envelope(
+        type="presence.cursor",
+        workspace_id=connection.workspace_id,
+        actor_id=connection.user_id,
+        project_id=project_id,
+        task_id=task_id,
+        data={
+            "user_id": connection.user_id,
+            "name": connection.name,
+            "avatar_url": connection.avatar_url,
+            "project_id": project_id,
+            "task_id": task_id,
+            "column": column,
+        },
+    )
 
 
 manager = ConnectionManager()

@@ -2,7 +2,7 @@ import asyncio
 import json
 import logging
 import time
-from typing import Any, Dict, Optional
+from typing import Any, Dict, Optional, Tuple
 
 from fastapi import APIRouter, Depends, WebSocket
 from pydantic import BaseModel
@@ -34,6 +34,7 @@ _MAX_MESSAGE_BYTES = 8192
 _RATE_LIMIT = 30
 _RATE_WINDOW_SECONDS = 10
 _TICKET_PROTOCOL = "syncra.ticket."
+_COLUMNS = {"todo", "in_progress", "review", "done"}
 
 
 class TicketResponse(BaseModel):
@@ -225,6 +226,9 @@ async def _handle_client_message(
     if message_type == "task.stopped_viewing":
         await _stop_viewing(workspace_id, connection_id, user_id, profile, payload)
         return
+    if message_type == "presence.cursor":
+        await _move_cursor(websocket, workspace_id, connection_id, user_id, profile, payload)
+        return
     await _socket_error(websocket, workspace_id, user_id, "Unsupported message")
 
 
@@ -283,6 +287,86 @@ async def _stop_viewing(
         return
     _connection, previous_task, previous_project = cleared
     await _broadcast_stopped(workspace_id, user_id, profile, previous_project, previous_task)
+
+
+async def _move_cursor(
+    websocket: WebSocket,
+    workspace_id: str,
+    connection_id: str,
+    user_id: str,
+    profile: Dict[str, str],
+    payload: Dict[str, Any],
+) -> None:
+    task_id, task_error = _optional_text(payload.get("task_id"), "Task not found")
+    if task_error:
+        await _socket_error(websocket, workspace_id, user_id, task_error)
+        return
+    column, column_error = _optional_text(payload.get("column"), "Unknown column")
+    if column_error:
+        await _socket_error(websocket, workspace_id, user_id, column_error)
+        return
+    if column is not None and column not in _COLUMNS:
+        await _socket_error(websocket, workspace_id, user_id, "Unknown column")
+        return
+
+    if task_id:
+        task = await tasks_repository.find_by_id(task_id)
+        project = None if task is None else await projects_repository.find_active_by_id(task.project_id)
+        if task is None or project is None or project.workspace_id != workspace_id:
+            await _socket_error(websocket, workspace_id, user_id, "Task not found")
+            return
+        manager.set_cursor(workspace_id, connection_id, project.id, task.id, None)
+        await _broadcast_cursor(workspace_id, user_id, profile, project.id, task.id, None)
+        return
+
+    if column:
+        project_id, project_error = _optional_text(payload.get("project_id"), "Project not found")
+        if project_error or project_id is None:
+            await _socket_error(websocket, workspace_id, user_id, "Project not found")
+            return
+        project = await projects_repository.find_active_by_id(project_id)
+        if project is None or project.workspace_id != workspace_id:
+            await _socket_error(websocket, workspace_id, user_id, "Project not found")
+            return
+        manager.set_cursor(workspace_id, connection_id, project.id, None, column)
+        await _broadcast_cursor(workspace_id, user_id, profile, project.id, None, column)
+        return
+
+    manager.set_cursor(workspace_id, connection_id, None, None, None)
+    await _broadcast_cursor(workspace_id, user_id, profile, None, None, None)
+
+
+async def _broadcast_cursor(
+    workspace_id: str,
+    user_id: str,
+    profile: Dict[str, str],
+    project_id: Optional[str],
+    task_id: Optional[str],
+    column: Optional[str],
+) -> None:
+    data = dict(profile)
+    data["user_id"] = user_id
+    data["project_id"] = project_id
+    data["task_id"] = task_id
+    data["column"] = column
+    await manager.broadcast_event(
+        _envelope(
+            "presence.cursor",
+            workspace_id,
+            user_id,
+            data,
+            project_id=project_id,
+            task_id=task_id,
+        )
+    )
+
+
+def _optional_text(value: Any, message: str) -> Tuple[Optional[str], Optional[str]]:
+    if value is None or value == "":
+        return None, None
+    if not isinstance(value, str):
+        return None, message
+    return value, None
 
 
 async def _broadcast_stopped(

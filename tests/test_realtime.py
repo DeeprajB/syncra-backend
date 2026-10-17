@@ -343,6 +343,60 @@ class RealtimeApiTests(unittest.TestCase):
         self.assertEqual(other.sent[-1]["type"], "presence.left")
         self.assertEqual(manager.connection_count("ws-1"), 1)
 
+    def test_cursor_follows_a_card_or_column_and_clears_on_disconnect(self):
+        client = self.client_for("member-1")
+        other = FakeSocket()
+        seated, _first = manager.connect("ws-1", "admin-1", other, "Avery Lane", "")
+        manager.set_cursor("ws-1", seated.connection_id, "proj-1", "task-1", None)
+        ticket = client.post("/api/v1/workspaces/ws-1/ws-ticket").json()["ticket"]
+        with client.websocket_connect("/ws/workspaces/ws-1", headers={"origin": "http://testserver"}) as socket:
+            socket.send_json({"type": "connection.auth", "ticket": ticket})
+            socket.receive_json()
+            snapshot = socket.receive_json()
+            admin = next(member for member in snapshot["data"]["members"] if member["user_id"] == "admin-1")
+            self.assertEqual(admin["cursor_task_id"], "task-1")
+            self.assertIsNone(admin["cursor_column"])
+
+            socket.send_json({"type": "presence.cursor", "project_id": "proj-1", "task_id": "task-1"})
+            moved = socket.receive_json()
+            self.assertEqual(moved["type"], "presence.cursor")
+            self.assertEqual(moved["actor_id"], "member-1")
+            self.assertEqual(moved["task_id"], "task-1")
+            self.assertEqual(moved["data"]["column"], None)
+            self.assertEqual(other.sent[-1]["data"]["name"], "Ada Lane")
+            self.assertEqual(other.sent[-1]["data"]["task_id"], "task-1")
+
+            socket.send_json({"type": "presence.cursor", "project_id": "proj-1", "column": "review"})
+            column = socket.receive_json()
+            self.assertEqual(column["data"]["column"], "review")
+            self.assertIsNone(column["data"]["task_id"])
+            self.assertEqual(column["project_id"], "proj-1")
+
+            socket.send_json({"type": "presence.cursor", "column": "later"})
+            unknown = socket.receive_json()
+            self.assertEqual(unknown["data"]["message"], "Unknown column")
+
+            socket.send_json({"type": "presence.cursor", "task_id": "missing"})
+            missing = socket.receive_json()
+            self.assertEqual(missing["data"]["message"], "Task not found")
+
+            socket.send_json({"type": "presence.cursor", "project_id": "proj-2", "column": "todo"})
+            wrong_project = socket.receive_json()
+            self.assertEqual(wrong_project["data"]["message"], "Project not found")
+
+            socket.send_json({"type": "presence.cursor"})
+            cleared = socket.receive_json()
+            self.assertIsNone(cleared["data"]["task_id"])
+            self.assertIsNone(cleared["data"]["column"])
+
+        cursor_clears = [
+            message
+            for message in other.sent
+            if message["type"] == "presence.cursor" and message["actor_id"] == "member-1" and message["data"]["task_id"] is None
+        ]
+        self.assertEqual(cursor_clears[-1]["data"]["column"], None)
+        self.assertEqual(other.sent[-1]["type"], "presence.left")
+
     def test_subprotocol_ticket_and_multi_tab_presence(self):
         client = self.client_for("member-1")
         ticket = client.post("/api/v1/workspaces/ws-1/ws-ticket").json()["ticket"]
