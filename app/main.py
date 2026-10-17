@@ -47,7 +47,7 @@ async def lifespan(_app: FastAPI):
 
 app = FastAPI(
     title="Syncra Backend",
-    version="0.0.8",
+    version="1.0.0",
     description="FastAPI backend for Syncra, providing REST APIs, WebSockets, authentication, and MongoDB data management for real-time project collaboration.",
     lifespan=lifespan,
 )
